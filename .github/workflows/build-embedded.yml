@@ -42,10 +42,11 @@ jobs:
         uses: docker/bake-action@v6
         with:
           targets: all
+          build-args: ARCH=${{ matrix.arch }}
         env:
           TARGETPLATFORM: linux/${{ matrix.arch }}
 
-      - name: Upload raw build
+      - name: Upload raw build for ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
           name: raw-docker-${{ matrix.arch }}
@@ -62,19 +63,19 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: raw-docker-${{ matrix.arch }}
-          path: ./raw
+          path: ./raw/${{ matrix.arch }}
 
-      - name: Package tarball
+      - name: Package tarball for ${{ matrix.arch }}
         run: |
-          cd ./raw
-          tar czf iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz *
-          ls -lh iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
+          cd ./raw/${{ matrix.arch }}
+          tar czf ../../../iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz *
+          ls -lh ../../../iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
           name: iotistic-engine-${{ matrix.arch }}
-          path: ./raw/iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
+          path: ./iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
           retention-days: 7
 
   release:
