@@ -263,7 +263,8 @@ FROM scratch AS embedded
 COPY --link --from=tini          /build/ /
 COPY --link --from=runc          /build/ /
 COPY --link --from=containerd    /build/ /
-COPY --link --from=build         /build  /
+COPY --link --from=build         /build/ /
+COPY --link --from=compose       /docker-compose /docker-compose
 
 
 # embedded development container - optimized for size but functional
