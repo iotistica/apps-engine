@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 120
     strategy:
       matrix:
-        arch: [amd64, arm64, armv7]  
+        arch: [amd64, arm64, armv7]   # 👈 list of arches you want to build
     env:
       DESTDIR: ./build/${{ matrix.arch }}
 
@@ -52,20 +52,9 @@ jobs:
 
       - name: Package tarball
         run: |
-          mkdir -p staging/usr/bin
-          mkdir -p staging/etc/systemd/system
-
-          # Copy built binaries
-          cp -r ${{ env.DESTDIR }}/* staging/usr/bin/
-
-          # Add installer and unit files (assumed in repo under packaging/)
-          cp packaging/install.sh staging/
-          cp packaging/docker.service staging/etc/systemd/system/
-          cp packaging/containerd.service staging/etc/systemd/system/
-
-          # Create tarball
-          tar czf docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz -C staging .
-          ls -lh docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
+          cd ${{ env.DESTDIR }}
+          tar czf ../../docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz .
+          ls -lh ../../docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
 
       - name: Upload artifact ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
