@@ -1,4 +1,4 @@
-name: buildkit
+name: build docker embededded
 
 # Default to 'contents: read', which grants actions to read commits.
 #
@@ -29,7 +29,7 @@ env:
   SETUP_BUILDKIT_IMAGE: moby/buildkit:latest
 
 jobs:
-  build-linux:
+  build-linux-arch:
     runs-on: ubuntu-24.04
     timeout-minutes: 120 # guardrails timeout for the whole job
     if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'ci/validate-only') }}
