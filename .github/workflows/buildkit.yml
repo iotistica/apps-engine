@@ -43,7 +43,7 @@ jobs:
         name: Build
         uses: docker/bake-action@v6
         with:
-          targets: binary-cross
+          targets: all
       -
         name: Upload artifacts
         uses: actions/upload-artifact@v4
