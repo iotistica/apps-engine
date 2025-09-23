@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*'
+      - 'v*'  # trigger on version tags like v1.4.0
   pull_request:
 
 env:
@@ -20,16 +20,19 @@ env:
   SETUP_BUILDKIT_IMAGE: moby/buildkit:latest
 
 jobs:
-  checkout:
+  build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      matrix:
+        arch: [amd64, arm64, armv7]  
+    env:
+      DESTDIR: ./build/${{ matrix.arch }}
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
 
-  setup-buildx:
-    runs-on: ubuntu-24.04
-    needs: checkout
-    steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -37,15 +40,6 @@ jobs:
           driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
           buildkitd-flags: --debug
 
-  build-matrix:
-    runs-on: ubuntu-24.04
-    needs: setup-buildx
-    strategy:
-      matrix:
-        arch: [amd64, arm64, armv7]
-    env:
-      DESTDIR: ./build/${{ matrix.arch }}
-    steps:
       - name: Build for ${{ matrix.arch }}
         uses: docker/bake-action@v6
         with:
@@ -56,34 +50,24 @@ jobs:
       - name: List build output
         run: ls -lR ${{ env.DESTDIR }}
 
-      - name: Upload intermediate artifact ${{ matrix.arch }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: intermediate-${{ matrix.arch }}
-          path: ${{ env.DESTDIR }}
-          if-no-files-found: error
-          retention-days: 7
-
-  package:
-    runs-on: ubuntu-24.04
-    needs: build-matrix
-    strategy:
-      matrix:
-        arch: [amd64, arm64, armv7]
-    steps:
-      - name: Download intermediate artifact ${{ matrix.arch }}
-        uses: actions/download-artifact@v4
-        with:
-          name: intermediate-${{ matrix.arch }}
-          path: ./build/${{ matrix.arch }}
-
-      - name: Package tarball ${{ matrix.arch }}
+      - name: Package tarball
         run: |
-          cd ./build/${{ matrix.arch }}
-          tar czf ../../docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz .
-          ls -lh ../../docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
+          mkdir -p staging/usr/bin
+          mkdir -p staging/etc/systemd/system
 
-      - name: Upload final artifact ${{ matrix.arch }}
+          # Copy built binaries
+          cp -r ${{ env.DESTDIR }}/* staging/usr/bin/
+
+          # Add installer and unit files (assumed in repo under packaging/)
+          cp packaging/install.sh staging/
+          cp packaging/docker.service staging/etc/systemd/system/
+          cp packaging/containerd.service staging/etc/systemd/system/
+
+          # Create tarball
+          tar czf docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz -C staging .
+          ls -lh docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
+
+      - name: Upload artifact ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
           name: docker-binaries-${{ matrix.arch }}
@@ -92,8 +76,8 @@ jobs:
           retention-days: 7
 
   release:
+    needs: build
     runs-on: ubuntu-24.04
-    needs: package
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Download artifacts
