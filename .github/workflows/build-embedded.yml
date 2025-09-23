@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 120
     strategy:
       matrix:
-        arch: [amd64, arm64, armv7]   # 👈 list of arches you want to build
+        arch: [amd64, arm64, armv7]  
     env:
       DESTDIR: ./build/${{ matrix.arch }}
 
