@@ -29,9 +29,6 @@ env:
   SETUP_BUILDKIT_IMAGE: moby/buildkit:latest
 
 jobs:
-  validate-dco:
-    uses: ./.github/workflows/.dco.yml
-
   build-linux:
     runs-on: ubuntu-24.04
     timeout-minutes: 120 # guardrails timeout for the whole job
