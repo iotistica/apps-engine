@@ -113,7 +113,7 @@ target "binary-cross" {
 #
 
 target "all" {
-  inherits = ["binary-cross"]
+  inherits = ["_common", "_platforms"]
   target = "embedded"
   output = [bindir(DOCKER_STATIC == "1" ? "binary" : "dynbinary")]
 }
