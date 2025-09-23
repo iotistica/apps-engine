@@ -63,4 +63,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: raw-docker-${{ matrix.arch }}
-          path: ./raw/${{ matrix
+          path: ./raw/${{ matrix.arch }}
+
+      # Example packaging step (replace with your actual packaging logic)
+      - name: Archive packaged build for ${{ matrix.arch }}
+        run: |
+          mkdir -p ./dist
+          tar czf ./dist/packaged-${{ matrix.arch }}.tar.gz -C ./raw/${{ matrix.arch }} .
+        shell: bash
+
+      - name: Upload packaged artifact for ${{ matrix.arch }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-docker-${{ matrix.arch }}
+          path: ./dist/packaged-${{ matrix.arch }}.tar.gz
