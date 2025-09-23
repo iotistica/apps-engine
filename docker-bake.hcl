@@ -124,7 +124,7 @@ target "binary-smoketest" {
 #
 
 target "all" {
-  inherits = ["_common"]
+  inherits = ["binary-cross"]
   target = "embedded"
   output = [bindir(DOCKER_STATIC == "1" ? "binary" : "dynbinary")]
 }
