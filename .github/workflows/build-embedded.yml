@@ -1,11 +1,8 @@
-name: build docker embededded
+name: build docker embedded
 
 # Default to 'contents: read', which grants actions to read commits.
-#
-# If any permission is set, any permission not included in the list is
-# implicitly set to "none".
-#
-# see https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#permissions
+# If any permission is set, any permission not included in the list is implicitly set to "none".
+# see: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#permissions
 permissions:
   contents: write
 
@@ -16,8 +13,6 @@ concurrency:
 on:
   workflow_dispatch:
   push:
-    # branches:
-    #   - 'master'
     tags:
       - 'v*'  # trigger on version tags like v1.4.0
   pull_request:
@@ -33,6 +28,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
@@ -46,21 +44,35 @@ jobs:
           targets: all
 
       - name: List build output
-        run: ls -l ${{ env.DESTDIR }}
+        run: ls -lR ${{ env.DESTDIR }}
 
-      - name: Upload artifacts
+      - name: Upload raw build output
         uses: actions/upload-artifact@v4
         with:
-          name: binary
+          name: raw-binaries
           path: ${{ env.DESTDIR }}
           if-no-files-found: error
           retention-days: 1
 
-      # Package all arch folders into one archive
-      - name: Package all architectures
+      # Package each architecture separately
+      - name: Package per architecture
         run: |
           cd ${{ env.DESTDIR }}
-          tar czf ../docker-binaries-${{ github.ref_name }}.tar.gz ./*
+          for arch in *; do
+            if [ -d "$arch" ]; then
+              echo "Packing $arch ..."
+              tar czf ../docker-binaries-${{ github.ref_name }}_${arch}.tar.gz -C "$arch" .
+            fi
+          done
+          ls -lh ../docker-binaries-*.tar.gz
+
+      - name: Upload per-arch artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-binaries
+          path: ./docker-binaries-${{ github.ref_name }}_*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -70,10 +82,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload archive to release
+      - name: Upload per-arch release assets
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/v')
         with:
-          files: ./docker-binaries-${{ github.ref_name }}.tar.gz
+          files: ./docker-binaries-${{ github.ref_name }}_*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
