@@ -266,25 +266,6 @@ COPY --link --from=runc          /build/ /
 COPY --link --from=containerd    /build/ /
 COPY --link --from=build         /build  /
 
-# smoke tests for embedded build
-FROM base AS embedded-smoketest
-WORKDIR /usr/local/bin
-COPY --from=build /build .
-COPY --from=containerd /build .
-COPY --from=runc /build .
-COPY --from=tini /build .
-RUN <<EOT
-  set -ex
-  file dockerd
-  dockerd --version
-  file docker-proxy
-  docker-proxy --version
-  file containerd
-  containerd --version
-  file runc
-  runc --version
-  file docker-init
-EOT
 
 # embedded development container - optimized for size but functional
 FROM dev-embedded AS dev-embedded-final

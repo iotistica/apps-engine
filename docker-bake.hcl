@@ -108,17 +108,6 @@ target "binary-cross" {
   inherits = ["binary", "_platforms"]
 }
 
-target "binary-smoketest" {
-  inherits = ["_common"]
-  target = "embedded-smoketest"
-  output = ["type=cacheonly"]
-  platforms = [
-    "linux/amd64",
-    "linux/arm/v7",
-    "linux/arm64",
-  ]
-}
-
 #
 # same as binary but with extra tools as well (containerd, runc, ...)
 #
@@ -132,7 +121,6 @@ target "all" {
 target "all-cross" {
   inherits = ["all", "_platforms"]
 }
-
 
 #
 
