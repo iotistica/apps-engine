@@ -7,9 +7,6 @@ The Moby Project
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/moby/moby/badge)](https://scorecard.dev/viewer/?uri=github.com/moby/moby)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10989/badge)](https://www.bestpractices.dev/projects/10989)
 
-
-![Moby Project logo](docs/static_files/moby-project-logo.png "The Moby Project")
-
 Moby is an open-source project created by Docker to enable and accelerate software containerization.
 
 It provides a "Lego set" of toolkit components, the framework for assembling them into custom container-based systems, and a place for all container enthusiasts and professionals to experiment and exchange ideas.
