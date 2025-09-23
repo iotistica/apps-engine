@@ -64,9 +64,8 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
   make $([ "$DOCKER_STATIC" = "1" ] && echo "STATIC=1") binaries
   xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") bin/containerd
   xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") bin/containerd-shim-runc-v2
-  xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") bin/ctr
   mkdir /build
-  mv bin/containerd bin/containerd-shim-runc-v2 bin/ctr /build
+  mv bin/containerd bin/containerd-shim-runc-v2 /build
 EOT
 
 FROM containerd-build AS containerd-linux
