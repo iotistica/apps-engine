@@ -110,15 +110,12 @@ target "binary-cross" {
 
 target "binary-smoketest" {
   inherits = ["_common"]
-  target = "smoketest"
+  target = "embedded-smoketest"
   output = ["type=cacheonly"]
   platforms = [
     "linux/amd64",
-    "linux/arm/v6",
     "linux/arm/v7",
     "linux/arm64",
-    "linux/ppc64le",
-    "linux/s390x"
   ]
 }
 
@@ -128,7 +125,7 @@ target "binary-smoketest" {
 
 target "all" {
   inherits = ["_common"]
-  target = "all"
+  target = "embedded"
   output = [bindir(DOCKER_STATIC == "1" ? "binary" : "dynbinary")]
 }
 
@@ -136,42 +133,7 @@ target "all-cross" {
   inherits = ["all", "_platforms"]
 }
 
-#
-# bin image
-#
 
-target "bin-image" {
-  inherits = ["all", "docker-metadata-action"]
-  output = ["type=docker"]
-}
-
-target "bin-image-cross" {
-  inherits = ["bin-image"]
-  output = ["type=image"]
-  platforms = [
-    "linux/amd64",
-    "linux/arm/v6",
-    "linux/arm/v7",
-    "linux/arm64",
-    "linux/ppc64le",
-    "linux/s390x",
-    "windows/amd64"
-  ]
-}
-
-#
-# dind
-#
-
-target "dind" {
-  inherits = ["_common"]
-  target = "dind"
-  tags = ["docker-dind"]
-  output = ["type=docker"]
-}
-
-#
-# dev
 #
 
 variable "SYSTEMD" {
@@ -182,32 +144,10 @@ variable "FIREWALLD" {
   default = "false"
 }
 
-target "dev" {
-  inherits = ["_common"]
-  target = "dev"
-  args = {
-    SYSTEMD = SYSTEMD
-    FIREWALLD = FIREWALLD
-  }
-  tags = ["docker-dev"]
-  output = ["type=docker"]
-}
-
 #
 # govulncheck
 #
 
 variable "GOVULNCHECK_FORMAT" {
   default = null
-}
-
-target "govulncheck" {
-  inherits = ["_common"]
-  dockerfile = "./hack/dockerfiles/govulncheck.Dockerfile"
-  target = "output"
-  args = {
-    FORMAT = GOVULNCHECK_FORMAT
-  }
-  no-cache-filter = ["run"]
-  output = ["${DESTDIR}"]
 }
