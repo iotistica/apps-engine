@@ -45,7 +45,7 @@ jobs:
           # Convert Docker platform to release-friendly name
           arch=$(echo "$arch" | sed 's#linux/##; s#arm/v#armv#g; s#v7#v7hf#g')
           mkdir -p dist
-          tar -czvf dist/iotistic-engine-${version}-${arch}.tar.gz -C build/ .
+          tar -czvf dist/iotistic-engine-${version}-${arch}.tar.gz -C build .
 
       # 5 Create GitHub Release
       - name: Create GitHub Release
