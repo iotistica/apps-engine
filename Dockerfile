@@ -8,6 +8,8 @@
 ARG GO_VERSION=1.24.7
 ARG BASE_DEBIAN_DISTRO="bookworm"
 ARG GOLANG_IMAGE="golang:${GO_VERSION}-${BASE_DEBIAN_DISTRO}"
+ARG DOCKER_BUILDTAGS="apparmor seccomp no_btrfs no_cri no_devmapper no_zfs exclude_disk_quota exclude_graphdriver_btrfs exclude_graphdriver_devicemapper exclude_graphdriver_zfs"
+
 
 # XX_VERSION specifies the version of the xx utility to use.
 ARG XX_VERSION=1.7.0
