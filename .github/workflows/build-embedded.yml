@@ -46,8 +46,11 @@ jobs:
         uses: docker/bake-action@v6
         with:
           targets: all
-      -
-        name: Upload artifacts
+          
+      - name: List build output
+        run: ls -l ${{ env.DESTDIR }}
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: binary
@@ -62,12 +65,13 @@ jobs:
           tag_name: ${{ github.ref_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+      
       - name: Upload binaries to release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/v')
         with:
-          files: ${{ env.DESTDIR }}/*
+          files: ${{ env.DESTDIR }}/*    # ensure files exist
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
