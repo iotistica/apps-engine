@@ -34,7 +34,7 @@ jobs:
         uses: docker/bake-action@v2
         with:
           file: Dockerfile   # explicitly point to your new Dockerfile
-          targets: all     # matches "FROM base AS build" stage
+          targets: binary     # matches "FROM base AS build" stage
 
       # 4 Package binaries
       - name: Package binaries
