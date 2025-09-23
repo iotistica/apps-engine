@@ -52,9 +52,20 @@ jobs:
 
       - name: Package tarball
         run: |
-          cd ${{ env.DESTDIR }}
-          tar czf ../../docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz .
-          ls -lh ../../docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
+          mkdir -p staging/usr/bin
+          mkdir -p staging/etc/systemd/system
+
+          # Copy built binaries
+          cp -r ${{ env.DESTDIR }}/* staging/usr/bin/
+
+          # Add installer and unit files (assumed in repo under packaging/)
+          cp packaging/install.sh staging/
+          cp packaging/docker.service staging/etc/systemd/system/
+          cp packaging/containerd.service staging/etc/systemd/system/
+
+          # Create tarball
+          tar czf docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz -C staging .
+          ls -lh docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
 
       - name: Upload artifact ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
