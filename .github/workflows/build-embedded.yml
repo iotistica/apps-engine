@@ -67,14 +67,14 @@ jobs:
       - name: Package tarball
         run: |
           cd ./raw
-          tar czf docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz *
-          ls -lh docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
+          tar czf iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz *
+          ls -lh iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
 
       - name: Upload packaged artifact
         uses: actions/upload-artifact@v4
         with:
-          name: docker-binaries-${{ matrix.arch }}
-          path: ./raw/docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
+          name: iotistic-engine-${{ matrix.arch }}
+          path: ./raw/iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
           retention-days: 7
 
   release:
@@ -85,7 +85,7 @@ jobs:
       - name: Download packaged artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: docker-binaries-*
+          pattern: iotistic-engine-*
           path: ./artifacts
 
       - name: Create GitHub Release
