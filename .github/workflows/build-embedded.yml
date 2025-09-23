@@ -1,9 +1,13 @@
 name: Build and Release Iotistic appEngine
 
 on:
-  push:
-    tags:
-      - 'v*'   # Trigger on version tags like v1.4.0
+ workflow_dispatch:
+ push:
+  branches:
+      - 'master'
+  # push:
+  #   tags:
+  #     - 'v*'   # Trigger on version tags like v1.4.0
 
 jobs:
   build-and-release:
@@ -30,7 +34,7 @@ jobs:
         uses: docker/bake-action@v2
         with:
           file: Dockerfile   # explicitly point to your new Dockerfile
-          targets: binary     # matches "FROM base AS build" stage
+          targets: all     # matches "FROM base AS build" stage
 
       # 4 Package binaries
       - name: Package binaries
@@ -41,7 +45,7 @@ jobs:
           # Convert Docker platform to release-friendly name
           arch=$(echo "$arch" | sed 's#linux/##; s#arm/v#armv#g; s#v7#v7hf#g')
           mkdir -p dist
-          tar -czvf dist/iotistic-engine-${version}-${arch}.tar.gz -C bundles/cross/${{ matrix.platform }} .
+          tar -czvf dist/iotistic-engine-${version}-${arch}.tar.gz -C build/${{ matrix.platform }} .
 
       # 5 Create GitHub Release
       - name: Create GitHub Release
