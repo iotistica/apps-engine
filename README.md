@@ -1,61 +1,50 @@
-The Moby Project
-================
+![balenaEngine](./docs/static/balena-engine.svg)
 
-[![PkgGoDev](https://pkg.go.dev/badge/github.com/moby/moby/v2)](https://pkg.go.dev/github.com/moby/moby/v2)
-![GitHub License](https://img.shields.io/github/license/moby/moby)
-[![Go Report Card](https://goreportcard.com/badge/github.com/moby/moby/v2)](https://goreportcard.com/report/github.com/moby/moby/v2)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/moby/moby/badge)](https://scorecard.dev/viewer/?uri=github.com/moby/moby)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10989/badge)](https://www.bestpractices.dev/projects/10989)
+**moby-based container engine for IoT**
 
-Moby is an open-source project created by Docker to enable and accelerate software containerization.
+## Highlights
 
-It provides a "Lego set" of toolkit components, the framework for assembling them into custom container-based systems, and a place for all container enthusiasts and professionals to experiment and exchange ideas.
-Components include container build tools, a container registry, orchestration tools, a runtime and more, and these can be used as building blocks in conjunction with other tools and projects.
+- __Small footprint__: 3.5x smaller than Docker CE, packaged as a single binary
+- __Multi-arch support__: Available for a wide variety of chipset architectures, supporting everything from tiny IoT devices to large industrial gateways
+- __True container deltas__: Bandwidth-efficient updates with binary diffs, 10-70x smaller than pulling layers
+- __Minimal wear-and-tear__: Extract layers as they arrive to prevent excessive writing to disk, protecting your storage from eventual corruption
+- __Failure-resistant pulls__: Atomic and durable image pulls defend against partial container pulls in the event of power failure
+- __Conservative memory use__: Prevents page cache thrashing during image pull, so your application runs undisturbed in low-memory situations
 
-## Principles
+## Motivation
 
-Moby is an open project guided by strong principles, aiming to be modular, flexible and without too strong an opinion on user experience.
-It is open to the community to help set its direction.
+balenaEngine is a container engine purpose-built for embedded and IoT use cases
+and compatible with Docker containers. Based on Docker’s Moby Project, balenaEngine
+supports container deltas for 10-70x more efficient bandwidth usage, has 3x
+smaller binaries, uses RAM and storage more conservatively, and focuses on
+atomicity and durability of container pulling.
 
-- Modular: the project includes lots of components that have well-defined functions and APIs that work together.
-- Batteries included but swappable: Moby includes enough components to build fully featured container systems, but its modular architecture ensures that most of the components can be swapped by different implementations.
-- Usable security: Moby provides secure defaults without compromising usability.
-- Developer focused: The APIs are intended to be functional and useful to build powerful tools.
-They are not necessarily intended as end user tools but as components aimed at developers.
-Documentation and UX is aimed at developers not end users.
+Since 2013, when we [first ported Docker to ARMv6 and the Raspberry Pi](https://www.balena.io/blog/docker-on-raspberry-pi/),
+the balena team has been working in and around the Docker codebase.
+Meanwhile, having seen IoT devices used in production for tens of millions of
+hours, we’ve become intimately acquainted with the unique needs of the embedded world.
+So we built a container engine that runs Docker containers just as well,
+shares the Docker components that are needed for our use case, and is augmented
+with the IoT-specific features that we’ve built out over time.
 
-## Audience
+## Transitioning from Docker CE
 
-The Moby Project is intended for engineers, integrators and enthusiasts looking to modify, hack, fix, experiment, invent and build systems based on containers.
-It is not for people looking for a commercially supported system, but for people who want to work and learn with open source code.
+We left out Docker features that we saw as most needed in cloud deployments and
+therefore not warranting inclusion in a lightweight IoT-focused container
+engine. Specifically, we’ve excluded:
 
-## Relationship with Docker
+- Docker Swarm
+- Cloud logging drivers
+- Plugin support
+- Overlay networking drivers
+- Non-boltdb discovery backends (consul, zookeeper, etcd, etc.)
+- Buildkit (although support can be enabled using a build tag)
 
-The components and tools in the Moby Project are initially the open source components that Docker and the community have built for the Docker Project.
-New projects can be added if they fit with the community goals. Docker is committed to using Moby as the upstream for the Docker Product.
-However, other projects are also encouraged to use Moby as an upstream, and to reuse the components in diverse ways, and all these uses will be treated in the same way. External maintainers and contributors are welcomed.
+Unless you depend on one of the features in Docker that balenaEngine omits, using
+balenaEngine should be a drop-in replacement.
 
-The Moby project is not intended as a location for support or feature requests for Docker products, but as a place for contributors to work on open source code, fix bugs, and make the code more useful.
-The releases are supported by the maintainers, community and users, on a best efforts basis only. For customers who want enterprise or commercial support, [Docker Desktop](https://www.docker.com/products/docker-desktop/) and [Mirantis Container Runtime](https://www.mirantis.com/software/mirantis-container-runtime/) are the appropriate products for these use cases.
+## License
 
------
-
-Legal
-=====
-
-*Brought to you courtesy of our legal counsel. For more context,
-please see the [NOTICE](https://github.com/moby/moby/blob/master/NOTICE) document in this repo.*
-
-Use and transfer of Moby may be subject to certain restrictions by the
-United States and other governments.
-
-It is your responsibility to ensure that your use and/or transfer does not
-violate applicable laws.
-
-For more information, please see https://www.bis.doc.gov
-
-Licensing
-=========
-Moby is licensed under the Apache License, Version 2.0. See
-[LICENSE](https://github.com/moby/moby/blob/master/LICENSE) for the full
+balenaEngine is licensed under the Apache License, Version 2.0. See
+[LICENSE](https://github.com/balena-os/balena-engine/blob/master/LICENSE) for the full
 license text.
