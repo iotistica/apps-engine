@@ -1,8 +1,5 @@
 name: build docker embedded
 
-# Default to 'contents: read', which grants actions to read commits.
-# If any permission is set, any permission not included in the list is implicitly set to "none".
-# see: https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#permissions
 permissions:
   contents: write
 
@@ -19,14 +16,19 @@ on:
 
 env:
   GO_VERSION: "1.24.7"
-  DESTDIR: ./build
   SETUP_BUILDX_VERSION: edge
   SETUP_BUILDKIT_IMAGE: moby/buildkit:latest
 
 jobs:
-  build-linux-arch:
+  build:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    strategy:
+      matrix:
+        arch: [amd64, arm64, armv7]   # 👈 list of arches you want to build
+    env:
+      DESTDIR: ./build/${{ matrix.arch }}
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -38,54 +40,45 @@ jobs:
           driver-opts: image=${{ env.SETUP_BUILDKIT_IMAGE }}
           buildkitd-flags: --debug
 
-      - name: Build
+      - name: Build for ${{ matrix.arch }}
         uses: docker/bake-action@v6
         with:
           targets: all
+        env:
+          TARGETPLATFORM: linux/${{ matrix.arch }}
 
       - name: List build output
         run: ls -lR ${{ env.DESTDIR }}
 
-      - name: Upload raw build output
-        uses: actions/upload-artifact@v4
-        with:
-          name: raw-binaries
-          path: ${{ env.DESTDIR }}
-          if-no-files-found: error
-          retention-days: 1
-
-      # Package each architecture separately
-      - name: Package per architecture
+      - name: Package tarball
         run: |
           cd ${{ env.DESTDIR }}
-          for arch in *; do
-            if [ -d "$arch" ]; then
-              echo "Packing $arch ..."
-              tar czf ../docker-binaries-${{ github.ref_name }}_${arch}.tar.gz -C "$arch" .
-            fi
-          done
-          ls -lh ../docker-binaries-*.tar.gz
+          tar czf ../../docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz .
+          ls -lh ../../docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
 
-      - name: Upload per-arch artifacts
+      - name: Upload artifact ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
-          name: docker-binaries
-          path: ./docker-binaries-${{ github.ref_name }}_*.tar.gz
+          name: docker-binaries-${{ matrix.arch }}
+          path: ./docker-binaries-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
           if-no-files-found: error
           retention-days: 7
 
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: docker-binaries-*
+          path: ./artifacts
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/v')
         with:
           tag_name: ${{ github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload per-arch release assets
-        uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          files: ./docker-binaries-${{ github.ref_name }}_*.tar.gz
+          files: ./artifacts/**/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
