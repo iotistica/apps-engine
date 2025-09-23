@@ -53,46 +53,53 @@ jobs:
           path: ${{ env.DESTDIR }}
 
   package:
-    needs: build
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        arch: [amd64, arm64, armv7]
-    steps:
-      - name: Download raw build
-        uses: actions/download-artifact@v4
-        with:
-          name: raw-docker-${{ matrix.arch }}
-          path: ./raw/${{ matrix.arch }}
-
-      - name: Package tarball for ${{ matrix.arch }}
-        run: |
-          cd ./raw/${{ matrix.arch }}
-          tar czf ../../../iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz *
-          ls -lh ../../../iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
-
-      - name: Upload packaged artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: iotistic-engine-${{ matrix.arch }}
-          path: ./iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
-          retention-days: 7
-
-  release:
-    needs: package
-    runs-on: ubuntu-24.04
-    if: startsWith(github.ref, 'refs/tags/v')
-    steps:
-      - name: Download packaged artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: iotistic-engine-*
-          path: ./artifacts
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: ./artifacts/**/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      needs: build
+      runs-on: ubuntu-24.04
+      strategy:
+        matrix:
+          arch: [amd64, arm64, armv7]
+      steps:
+        - name: Download raw build
+          uses: actions/download-artifact@v4
+          with:
+            name: raw-docker-${{ matrix.arch }}
+            path: ./raw/${{ matrix.arch }}
+    
+        - name: Locate architecture-specific binaries
+          id: locate
+          run: |
+            # Docker bake might create subfolder like linux-amd64 inside the raw folder
+            SUBFOLDER=$(find ./raw/${{ matrix.arch }} -mindepth 1 -maxdepth 1 -type d | grep "${{ matrix.arch }}")
+            echo "subfolder=$SUBFOLDER" >> $GITHUB_OUTPUT
+    
+        - name: Package tarball for ${{ matrix.arch }}
+          run: |
+            cd ${{ steps.locate.outputs.subfolder }}
+            tar czf ../../../iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz *
+            ls -lh ../../../iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
+    
+        - name: Upload packaged artifact
+          uses: actions/upload-artifact@v4
+          with:
+            name: iotistic-engine-${{ matrix.arch }}
+            path: ./iotistic-engine-${{ github.ref_name }}_${{ matrix.arch }}.tar.gz
+            retention-days: 7
+    
+    release:
+      needs: package
+      runs-on: ubuntu-24.04
+      if: startsWith(github.ref, 'refs/tags/v')
+      steps:
+        - name: Download packaged artifacts
+          uses: actions/download-artifact@v4
+          with:
+            pattern: iotistic-engine-*
+            path: ./artifacts
+    
+        - name: Create GitHub Release
+          uses: softprops/action-gh-release@v1
+          with:
+            tag_name: ${{ github.ref_name }}
+            files: ./artifacts/**/*
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
