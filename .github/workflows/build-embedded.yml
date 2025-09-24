@@ -68,3 +68,11 @@ jobs:
         with:
           name: iotistic-engine-tarballs
           path: iotistic-engine-${{ steps.tag.outputs.tag }}-*.tar.gz
+
+      - name: Publish release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: iotistic-engine-${{ steps.tag.outputs.tag }}-*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
