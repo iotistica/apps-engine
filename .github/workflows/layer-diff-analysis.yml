@@ -1,0 +1,153 @@
+name: layer-diff-analysis
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_image:
+        description: 'Base image to compare against'
+        required: true
+        default: 'docker:latest'
+      compare_image:
+        description: 'Image to compare (leave empty for current build)'
+        required: false
+
+jobs:
+  layer-diff:
+    runs-on: ubuntu-24.04
+    env:
+      DESTDIR: ./build
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build current image
+        uses: docker/bake-action@v6
+        with:
+          targets: all
+          load: true
+          set: |
+            *.tags=local-build:latest
+
+      - name: Install dive for layer analysis
+        run: |
+          wget https://github.com/wagoodman/dive/releases/download/v0.12.0/dive_0.12.0_linux_amd64.deb
+          sudo apt install ./dive_0.12.0_linux_amd64.deb
+
+      - name: Analyze base image layers
+        run: |
+          echo "Analyzing base image: ${{ github.event.inputs.base_image }}"
+          docker pull ${{ github.event.inputs.base_image }}
+          dive ${{ github.event.inputs.base_image }} --ci --json > base-layers.json
+
+      - name: Analyze current build layers  
+        run: |
+          echo "Analyzing current build: local-build:latest"
+          dive local-build:latest --ci --json > current-layers.json
+
+      - name: Generate layer diff report
+        run: |
+          cat > layer-diff.py << 'EOF'
+          import json
+          import sys
+          
+          def analyze_layers(base_file, current_file):
+              with open(base_file) as f:
+                  base = json.load(f)
+              with open(current_file) as f:
+                  current = json.load(f)
+              
+              print("=== LAYER ANALYSIS REPORT ===")
+              print(f"Base image layers: {len(base.get('layer', []))}")
+              print(f"Current image layers: {len(current.get('layer', []))}")
+              
+              base_size = sum(layer.get('size', 0) for layer in base.get('layer', []))
+              current_size = sum(layer.get('size', 0) for layer in current.get('layer', []))
+              
+              print(f"Base total size: {base_size:,} bytes ({base_size/1024/1024:.1f} MB)")  
+              print(f"Current total size: {current_size:,} bytes ({current_size/1024/1024:.1f} MB)")
+              print(f"Size difference: {current_size-base_size:+,} bytes ({(current_size-base_size)/1024/1024:+.1f} MB)")
+              
+              efficiency = current.get('efficiency', 0) * 100
+              base_efficiency = base.get('efficiency', 0) * 100
+              print(f"Efficiency change: {efficiency:.1f}% vs {base_efficiency:.1f}% ({efficiency-base_efficiency:+.1f}%)")
+              
+              # Save detailed diff
+              diff_report = {
+                  'base_image': '${{ github.event.inputs.base_image }}',
+                  'current_image': 'local-build:latest',
+                  'size_diff_bytes': current_size - base_size,
+                  'size_diff_mb': (current_size - base_size) / 1024 / 1024,
+                  'efficiency_diff': efficiency - base_efficiency,
+                  'base_layers': len(base.get('layer', [])),
+                  'current_layers': len(current.get('layer', [])),
+                  'timestamp': '$(date -Iseconds)'
+              }
+              
+              with open('layer-diff-report.json', 'w') as f:
+                  json.dump(diff_report, f, indent=2)
+              
+              return current_size - base_size
+          
+          if __name__ == '__main__':
+              diff = analyze_layers('base-layers.json', 'current-layers.json')
+              sys.exit(0 if abs(diff) < 100*1024*1024 else 1)  # Fail if >100MB difference
+          EOF
+          
+          python3 layer-diff.py
+
+      - name: Export layer contents for manual analysis
+        run: |
+          # Save base image layers
+          docker save ${{ github.event.inputs.base_image }} | tar -xv
+          mkdir -p layer-analysis/base/
+          find . -name "*.tar" -exec tar -tf {} \; > layer-analysis/base/file-list.txt
+          
+          # Save current image layers  
+          docker save local-build:latest | tar -xv
+          mkdir -p layer-analysis/current/
+          find . -name "*.tar" -exec tar -tf {} \; > layer-analysis/current/file-list.txt
+          
+          # Generate file diff
+          diff -u layer-analysis/base/file-list.txt layer-analysis/current/file-list.txt > layer-analysis/file-changes.diff || true
+          
+      - name: Upload layer analysis artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: layer-diff-analysis
+          path: |
+            layer-diff-report.json
+            base-layers.json
+            current-layers.json
+            layer-analysis/
+          retention-days: 30
+
+      - name: Comment layer diff on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('layer-diff-report.json', 'utf8'));
+            
+            const body = `
+            ## 📊 Layer Diff Analysis
+            
+            **Size Impact:** ${report.size_diff_mb > 0 ? '+' : ''}${report.size_diff_mb.toFixed(1)} MB
+            **Efficiency Change:** ${report.efficiency_diff > 0 ? '+' : ''}${report.efficiency_diff.toFixed(1)}%
+            **Layer Count:** ${report.current_layers} vs ${report.base_layers} (base)
+            
+            ${Math.abs(report.size_diff_mb) > 50 ? '⚠️ **Large size change detected!**' : '✅ Size change within acceptable range'}
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });

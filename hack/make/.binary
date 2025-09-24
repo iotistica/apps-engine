@@ -8,6 +8,8 @@ binary_extension() {
 	fi
 }
 
+BINARY_SHORT_NAME='iotistic-engine'
+BINARY_NAME="$BINARY_SHORT_NAME-$VERSION"
 BINARY_EXTENSION="$(binary_extension)"
 BINARY_FULLNAME="$BINARY_NAME$BINARY_EXTENSION"
 
