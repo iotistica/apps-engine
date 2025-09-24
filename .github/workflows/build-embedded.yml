@@ -45,3 +45,26 @@ jobs:
         with:
           name: iotistic-engine
           path: ${{ env.DESTDIR }}
+          
+      - name: Get Tag Name
+        if: startsWith(github.ref, 'refs/tags/')
+        id: tag
+        run: |
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create tarballs for each arch (dynamic)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          for d in "${{ env.DESTDIR }}"/*/ ; do
+            arch=$(basename "$d")
+            tarball="iotistic-engine-${TAG}-${arch}.tar.gz"
+            tar -czf "$tarball" -C "$d" .
+          done
+
+      - name: Upload all tarballs (dynamic)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: iotistic-engine-tarballs
+          path: iotistic-engine-${{ steps.tag.outputs.tag }}-*.tar.gz
