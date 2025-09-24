@@ -6,9 +6,8 @@ binary_extension() {
 	if [ "$(go env GOOS)" = 'windows' ]; then
 		echo -n '.exe'
 	fi
-}
-
-
+}``
+BINARY_NAME="iotistic"
 BINARY_EXTENSION="$(binary_extension)"
 BINARY_FULLNAME="$BINARY_NAME$BINARY_EXTENSION"
 
