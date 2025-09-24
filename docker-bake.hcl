@@ -58,6 +58,7 @@ function "bindir" {
   result = DESTDIR != "" ? DESTDIR : "./bundles/${defaultdir}"
 }
 
+
 target "_common" {
   args = {
     BUILDKIT_CONTEXT_KEEP_GIT_DIR = 1
@@ -124,6 +125,7 @@ target "all-cross" {
 
 #
 
+
 variable "SYSTEMD" {
   default = "false"
 }
@@ -136,6 +138,18 @@ variable "FIREWALLD" {
 # govulncheck
 #
 
+
 variable "GOVULNCHECK_FORMAT" {
   default = null
+}
+
+target "govulncheck" {
+  inherits = ["_common"]
+  dockerfile = "./hack/dockerfiles/govulncheck.Dockerfile"
+  target = "output"
+  args = {
+    FORMAT = GOVULNCHECK_FORMAT
+  }
+  no-cache-filter = ["run"]
+  output = ["${DESTDIR}"]
 }
