@@ -24,7 +24,8 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        arch: [amd64, arm64, armv7]
+        arch: [amd64]
+        # arch: [amd64, arm64, armv7]
     env:
       DESTDIR: ./build/${{ matrix.arch }}
     steps:
@@ -51,29 +52,3 @@ jobs:
         with:
           name: raw-docker-${{ matrix.arch }}
           path: ${{ env.DESTDIR }}
-
-  package:
-    needs: build
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        arch: [amd64, arm64, armv7]
-    steps:
-      - name: Download raw build
-        uses: actions/download-artifact@v4
-        with:
-          name: raw-docker-${{ matrix.arch }}
-          path: ./raw/${{ matrix.arch }}
-
-      - name: Archive packaged build for ${{ matrix.arch }}
-        run: |
-          mkdir -p ./dist
-          # Archive only the contents of the arch-specific directory, not the folder itself
-          tar czf ./dist/${{ matrix.arch }}.tar.gz -C ./raw/${{ matrix.arch }} .
-        shell: bash
-
-      - name: Upload packaged artifact for ${{ matrix.arch }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.arch }}
-          path: ./dist/${{ matrix.arch }}.tar.gz
