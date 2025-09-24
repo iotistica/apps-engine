@@ -275,6 +275,19 @@ COPY --link --from=containerd    /build/ /
 COPY --link --from=build         /build/ /
 COPY --link --from=compose       /docker-compose /docker-compose
 
+# smoke tests
+# usage:
+# > docker buildx bake binary-smoketest
+FROM base AS smoketest
+WORKDIR /usr/local/bin
+COPY --from=build /build .
+RUN <<EOT
+  set -ex
+  file dockerd
+  dockerd --version
+  file docker-proxy
+  docker-proxy --version
+EOT
 
 # embedded development container - optimized for size but functional
 FROM dev-embedded AS dev-embedded-final
