@@ -1,9 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# Embedded-friendly Docker build with Youki runtime - optimized for size and performance
-# Keeps: containerd, youki (rust OCI runtime), tini, dockercli, compose  
+# Embedded-friendly Docker build - optimized for size while keeping essential functionality
+# Keeps: containerd, runc, tini, dockercli, compose
 # Removes: buildx, dev tools, test infrastructure, debug tools, advanced features
-# Runtime: youki instead of runc (faster, more secure, Rust-based)
 # Architectures: amd64, arm64, arm only (removes ppc64le, s390x, riscv64, 386, windows)
 
 ARG GO_VERSION=1.24.7
@@ -100,7 +99,7 @@ RUN --mount=source=hack/dockerfile/cli.sh,target=/download-or-build-cli.sh \
 FROM base AS runc-src
 WORKDIR /usr/src/runc
 RUN git init . && git remote add origin "https://github.com/opencontainers/runc.git"
-ARG RUNC_VERSION=v1.1.12
+ARG RUNC_VERSION=v1.3.0
 RUN git fetch -q --depth 1 origin "${RUNC_VERSION}" +refs/tags/*:refs/tags/* && git checkout -q FETCH_HEAD
 
 FROM base AS runc-build
@@ -108,35 +107,24 @@ WORKDIR /go/src/github.com/opencontainers/runc
 ARG TARGETPLATFORM
 RUN --mount=type=cache,sharing=locked,id=moby-runc-aptlib,target=/var/lib/apt \
     --mount=type=cache,sharing=locked,id=moby-runc-aptcache,target=/var/cache/apt \
-        xx-apt-get install -y --no-install-recommends \
+        apt-get update && xx-apt-get install -y --no-install-recommends \
             gcc \
             libc6-dev \
             libseccomp-dev \
             pkg-config
 ARG DOCKER_STATIC
 RUN --mount=from=runc-src,src=/usr/src/runc,rw \
-    --mount=type=cache,target=/root/.cache/go-build,id=runc-build-$TARGETPLATFORM \
-    --mount=type=cache,target=/go/pkg/mod,id=runc-mod-$TARGETPLATFORM <<EOT
-  set -ex
-  export CC=$(xx-info)-gcc
-  export CGO_ENABLED=1
-  case "$(xx-info arch)" in
-    amd64) export GOARCH=amd64 ;;
-    arm64) export GOARCH=arm64 ;;
-    armv7) export GOARCH=arm GOARM=7 ;;
-  esac
+    --mount=type=cache,target=/root/.cache/go-build,id=runc-build-$TARGETPLATFORM <<EOT
+  set -e
   xx-go --wrap
-  if [ "$DOCKER_STATIC" = "1" ]; then
-    export CGO_LDFLAGS="-static"
-    export LDFLAGS="-extldflags \"-static\""
-    export BUILDTAGS="netgo osusergo static_build"
-  fi
-  make BUILDTAGS="$BUILDTAGS" COMMIT=$(git rev-parse HEAD) PREFIX=/build install
-  xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") /build/sbin/runc
+  CGO_ENABLED=1 make "$([ "$DOCKER_STATIC" = "1" ] && echo "static" || echo "runc")"
+  xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") runc
+  mkdir /build
+  mv runc /build/
 EOT
 
 FROM runc-build AS runc-linux
-FROM binary-dummy AS runc-windows  
+FROM binary-dummy AS runc-windows
 FROM runc-${TARGETOS} AS runc
 
 # tini
