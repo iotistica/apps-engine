@@ -96,62 +96,71 @@ RUN --mount=source=hack/dockerfile/cli.sh,target=/download-or-build-cli.sh \
      && /build/docker --version \
      && /build/docker completion bash >/completion.bash
 
-# youki (Rust-based OCI runtime - faster and more secure than runc)
+# youki (Rust-based OCI runtime - built from source only)
 FROM base AS youki-src
 WORKDIR /usr/src/youki
 RUN git init . && git remote add origin "https://github.com/containers/youki.git"
-ARG YOUKI_VERSION=v0.4.0
+ARG YOUKI_VERSION=v0.3.3
 RUN git fetch -q --depth 1 origin "${YOUKI_VERSION}" +refs/tags/*:refs/tags/* && git checkout -q FETCH_HEAD
 
 FROM base AS youki-build
 WORKDIR /usr/src/youki
 ARG TARGETPLATFORM
-# Install Rust toolchain
+# Install minimal dependencies for Rust cross-compilation
 RUN --mount=type=cache,sharing=locked,id=moby-youki-aptlib,target=/var/lib/apt \
     --mount=type=cache,sharing=locked,id=moby-youki-aptcache,target=/var/cache/apt \
         apt-get update && xx-apt-get install -y --no-install-recommends \
+            curl \
             gcc \
             libc6-dev \
             libseccomp-dev \
-            libdbus-1-dev \
-            libsystemd-dev \
-            pkg-config \
-            curl
-# Install Rust with cross-compilation support
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+            pkg-config
+# Install Rust - source build only
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
 ENV PATH="/root/.cargo/bin:${PATH}"
-# Install cross-compilation target
-RUN case "$(xx-info arch)" in \
-        amd64) rustup target add x86_64-unknown-linux-musl ;; \
-        arm64) rustup target add aarch64-unknown-linux-musl ;; \
-        armv7) rustup target add armv7-unknown-linux-musleabihf ;; \
-    esac
 ARG DOCKER_STATIC
 RUN --mount=from=youki-src,src=/usr/src/youki,rw \
     --mount=type=cache,target=/usr/local/cargo/registry,id=youki-cargo-registry-$TARGETPLATFORM \
     --mount=type=cache,target=/usr/src/youki/target,id=youki-build-$TARGETPLATFORM <<EOT
-  set -e
-  # Set cross-compilation target
-  case "$(xx-info arch)" in
-    amd64) export CARGO_TARGET="x86_64-unknown-linux-musl" ;;
-    arm64) export CARGO_TARGET="aarch64-unknown-linux-musl" ;;
-    armv7) export CARGO_TARGET="armv7-unknown-linux-musleabihf" ;;
-  esac
+  set -ex
   
-  # Set cross-compilation environment
+  # Configure cross-compilation environment using xx-toolchain
   export CC=$(xx-info)-gcc
   export CXX=$(xx-info)-g++
+  export PKG_CONFIG=$(xx-info)-pkg-config
+  export PKG_CONFIG_ALLOW_CROSS=1
   
-  # Build youki with static linking for embedded use
+  # Set Rust target based on platform
+  case "$(xx-info arch)" in
+    amd64) export RUST_TARGET="x86_64-unknown-linux-gnu" ;;
+    arm64) export RUST_TARGET="aarch64-unknown-linux-gnu" ;;
+    armv7) export RUST_TARGET="armv7-unknown-linux-gnueabihf" ;;
+    *) echo "Unsupported architecture: $(xx-info arch)"; exit 1 ;;
+  esac
+  
+  # Install target if not already present
+  rustup target add $RUST_TARGET
+  
+  # Build youki from source with minimal features for embedded use
   if [ "$DOCKER_STATIC" = "1" ]; then
-    export RUSTFLAGS="-C target-feature=+crt-static"
-    cargo build --release --target=$CARGO_TARGET --features v2
+    # Static build with minimal features
+    RUSTFLAGS="-C target-feature=+crt-static" \
+    cargo build --release --target=$RUST_TARGET \
+      --no-default-features \
+      --features "systemd,cgroupsv2_devices"
   else
-    cargo build --release --target=$CARGO_TARGET --features v2
+    # Dynamic build with minimal features  
+    cargo build --release --target=$RUST_TARGET \
+      --no-default-features \
+      --features "systemd,cgroupsv2_devices"
   fi
   
   mkdir -p /build
-  cp target/$CARGO_TARGET/release/youki /build/runc
+  # Copy youki binary as runc for drop-in compatibility
+  cp target/$RUST_TARGET/release/youki /build/runc
+  chmod +x /build/runc
+  
+  # Verify the build
   xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") /build/runc
 EOT
 
