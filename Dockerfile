@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# Embedded-friendly Docker build - optimized for size while keeping essential functionality
-# Keeps: containerd, runc, tini, dockercli, compose
+# Embedded-friendly Docker build with Youki runtime - optimized for size and performance
+# Keeps: containerd, youki (rust OCI runtime), tini, dockercli, compose  
 # Removes: buildx, dev tools, test infrastructure, debug tools, advanced features
+# Runtime: youki instead of runc (faster, more secure, Rust-based)
 # Architectures: amd64, arm64, arm only (removes ppc64le, s390x, riscv64, 386, windows)
 
 ARG GO_VERSION=1.24.7
@@ -95,36 +96,67 @@ RUN --mount=source=hack/dockerfile/cli.sh,target=/download-or-build-cli.sh \
      && /build/docker --version \
      && /build/docker completion bash >/completion.bash
 
-# runc
-FROM base AS runc-src
-WORKDIR /usr/src/runc
-RUN git init . && git remote add origin "https://github.com/opencontainers/runc.git"
-ARG RUNC_VERSION=v1.3.0
-RUN git fetch -q --depth 1 origin "${RUNC_VERSION}" +refs/tags/*:refs/tags/* && git checkout -q FETCH_HEAD
+# youki (Rust-based OCI runtime - faster and more secure than runc)
+FROM base AS youki-src
+WORKDIR /usr/src/youki
+RUN git init . && git remote add origin "https://github.com/containers/youki.git"
+ARG YOUKI_VERSION=v0.4.0
+RUN git fetch -q --depth 1 origin "${YOUKI_VERSION}" +refs/tags/*:refs/tags/* && git checkout -q FETCH_HEAD
 
-FROM base AS runc-build
-WORKDIR /go/src/github.com/opencontainers/runc
+FROM base AS youki-build
+WORKDIR /usr/src/youki
 ARG TARGETPLATFORM
-RUN --mount=type=cache,sharing=locked,id=moby-runc-aptlib,target=/var/lib/apt \
-    --mount=type=cache,sharing=locked,id=moby-runc-aptcache,target=/var/cache/apt \
+# Install Rust toolchain
+RUN --mount=type=cache,sharing=locked,id=moby-youki-aptlib,target=/var/lib/apt \
+    --mount=type=cache,sharing=locked,id=moby-youki-aptcache,target=/var/cache/apt \
         apt-get update && xx-apt-get install -y --no-install-recommends \
             gcc \
             libc6-dev \
             libseccomp-dev \
-            pkg-config
+            libdbus-1-dev \
+            libsystemd-dev \
+            pkg-config \
+            curl
+# Install Rust with cross-compilation support
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+# Install cross-compilation target
+RUN case "$(xx-info arch)" in \
+        amd64) rustup target add x86_64-unknown-linux-musl ;; \
+        arm64) rustup target add aarch64-unknown-linux-musl ;; \
+        armv7) rustup target add armv7-unknown-linux-musleabihf ;; \
+    esac
 ARG DOCKER_STATIC
-RUN --mount=from=runc-src,src=/usr/src/runc,rw \
-    --mount=type=cache,target=/root/.cache/go-build,id=runc-build-$TARGETPLATFORM <<EOT
+RUN --mount=from=youki-src,src=/usr/src/youki,rw \
+    --mount=type=cache,target=/usr/local/cargo/registry,id=youki-cargo-registry-$TARGETPLATFORM \
+    --mount=type=cache,target=/usr/src/youki/target,id=youki-build-$TARGETPLATFORM <<EOT
   set -e
-  xx-go --wrap
-  CGO_ENABLED=1 make "$([ "$DOCKER_STATIC" = "1" ] && echo "static" || echo "runc")"
-  xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") runc
-  mkdir /build
-  mv runc /build/
+  # Set cross-compilation target
+  case "$(xx-info arch)" in
+    amd64) export CARGO_TARGET="x86_64-unknown-linux-musl" ;;
+    arm64) export CARGO_TARGET="aarch64-unknown-linux-musl" ;;
+    armv7) export CARGO_TARGET="armv7-unknown-linux-musleabihf" ;;
+  esac
+  
+  # Set cross-compilation environment
+  export CC=$(xx-info)-gcc
+  export CXX=$(xx-info)-g++
+  
+  # Build youki with static linking for embedded use
+  if [ "$DOCKER_STATIC" = "1" ]; then
+    export RUSTFLAGS="-C target-feature=+crt-static"
+    cargo build --release --target=$CARGO_TARGET --features v2
+  else
+    cargo build --release --target=$CARGO_TARGET --features v2
+  fi
+  
+  mkdir -p /build
+  cp target/$CARGO_TARGET/release/youki /build/runc
+  xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") /build/runc
 EOT
 
-FROM runc-build AS runc-linux
-FROM binary-dummy AS runc-windows
+FROM youki-build AS runc-linux
+FROM binary-dummy AS runc-windows  
 FROM runc-${TARGETOS} AS runc
 
 # tini
