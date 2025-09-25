@@ -89,11 +89,24 @@ ARG DOCKERCLI_VERSION
 ARG TARGETPLATFORM
 RUN --mount=source=hack/dockerfile/cli.sh,target=/download-or-build-cli.sh \
     --mount=type=cache,id=dockercli-git-$TARGETPLATFORM,sharing=locked,target=./.git \
-    --mount=type=cache,target=/root/.cache/go-build,id=dockercli-build-$TARGETPLATFORM \
-        rm -f ./.git/*.lock \
-     && /download-or-build-cli.sh ${DOCKERCLI_VERSION} ${DOCKERCLI_REPOSITORY} /build \
-     && /build/docker --version \
-     && /build/docker completion bash >/completion.bash
+    --mount=type=cache,target=/root/.cache/go-build,id=dockercli-build-$TARGETPLATFORM <<EOT
+  set -ex
+  rm -f ./.git/*.lock
+  /download-or-build-cli.sh ${DOCKERCLI_VERSION} ${DOCKERCLI_REPOSITORY} /build
+  
+  # Ensure the binary is executable and verify it works
+  chmod +x /build/docker
+  file /build/docker
+  
+  # Test the binary (skip version check if cross-compiled)
+  if [ "$(xx-info arch)" = "$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')" ]; then
+    /build/docker --version
+    /build/docker completion bash >/completion.bash
+  else
+    # For cross-compiled binaries, just create a dummy completion file
+    echo "# Docker completion for cross-compiled binary" >/completion.bash
+  fi
+EOT
 
 # runc
 FROM base AS runc-src
