@@ -62,7 +62,7 @@ jobs:
         name: Build embedded image
         uses: docker/bake-action@v6
         with:
-          targets: embedded
+          targets: all
           set: |
             *.cache-from=type=gha,scope=dev${{ matrix.mode }}
             *.cache-to=type=gha,scope=dev${{ matrix.mode }},mode=max
