@@ -266,12 +266,14 @@ EOT
 # binary output
 FROM scratch AS binary
 COPY --from=build /build/ /
+COPY --from=dockercli /build/ /
 
 # embedded complete package - essential components only
 FROM scratch AS embedded
 COPY --link --from=tini          /build/ /
 COPY --link --from=runc          /build/ /
 COPY --link --from=containerd    /build/ /
+COPY --link --from=dockercli     /build/ /
 COPY --link --from=build         /build/ /
 COPY --link --from=compose       /docker-compose /docker-compose
 
