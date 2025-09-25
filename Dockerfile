@@ -96,65 +96,46 @@ RUN --mount=source=hack/dockerfile/cli.sh,target=/download-or-build-cli.sh \
      && /build/docker --version \
      && /build/docker completion bash >/completion.bash
 
-# youki (Rust-based OCI runtime - built from source only)
-FROM base AS youki-src
-WORKDIR /usr/src/youki
-RUN git init . && git remote add origin "https://github.com/containers/youki.git"
-ARG YOUKI_VERSION=v0.3.3
-RUN git fetch -q --depth 1 origin "${YOUKI_VERSION}" +refs/tags/*:refs/tags/* && git checkout -q FETCH_HEAD
+# runc
+FROM base AS runc-src
+WORKDIR /usr/src/runc
+RUN git init . && git remote add origin "https://github.com/opencontainers/runc.git"
+ARG RUNC_VERSION=v1.1.12
+RUN git fetch -q --depth 1 origin "${RUNC_VERSION}" +refs/tags/*:refs/tags/* && git checkout -q FETCH_HEAD
 
-FROM base AS youki-build
-WORKDIR /usr/src/youki
+FROM base AS runc-build
+WORKDIR /go/src/github.com/opencontainers/runc
 ARG TARGETPLATFORM
-# Install minimal dependencies for Rust cross-compilation
-RUN --mount=type=cache,sharing=locked,id=moby-youki-aptlib,target=/var/lib/apt \
-    --mount=type=cache,sharing=locked,id=moby-youki-aptcache,target=/var/cache/apt \
-        apt-get update && xx-apt-get install -y --no-install-recommends \
-            curl \
+RUN --mount=type=cache,sharing=locked,id=moby-runc-aptlib,target=/var/lib/apt \
+    --mount=type=cache,sharing=locked,id=moby-runc-aptcache,target=/var/cache/apt \
+        xx-apt-get install -y --no-install-recommends \
             gcc \
             libc6-dev \
             libseccomp-dev \
             pkg-config
-# Install Rust - source build only
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
-ENV PATH="/root/.cargo/bin:${PATH}"
 ARG DOCKER_STATIC
-RUN --mount=from=youki-src,src=/usr/src/youki,rw \
-    --mount=type=cache,target=/usr/local/cargo/registry,id=youki-cargo-registry-$TARGETPLATFORM \
-    --mount=type=cache,target=/usr/src/youki/target,id=youki-build-$TARGETPLATFORM <<EOT
+RUN --mount=from=runc-src,src=/usr/src/runc,rw \
+    --mount=type=cache,target=/root/.cache/go-build,id=runc-build-$TARGETPLATFORM \
+    --mount=type=cache,target=/go/pkg/mod,id=runc-mod-$TARGETPLATFORM <<EOT
   set -ex
-  
-  # Configure cross-compilation environment using xx-toolchain
   export CC=$(xx-info)-gcc
-  export CXX=$(xx-info)-g++
-  export PKG_CONFIG=$(xx-info)-pkg-config
-  export PKG_CONFIG_ALLOW_CROSS=1
-  
-  # Set Rust target based on platform
+  export CGO_ENABLED=1
   case "$(xx-info arch)" in
-    amd64) export RUST_TARGET="x86_64-unknown-linux-gnu" ;;
-    arm64) export RUST_TARGET="aarch64-unknown-linux-gnu" ;;
-    armv7) export RUST_TARGET="armv7-unknown-linux-gnueabihf" ;;
-    *) echo "Unsupported architecture: $(xx-info arch)"; exit 1 ;;
+    amd64) export GOARCH=amd64 ;;
+    arm64) export GOARCH=arm64 ;;
+    armv7) export GOARCH=arm GOARM=7 ;;
   esac
-  
-  # Install target if not already present
-  rustup target add $RUST_TARGET
-  
-  # Build youki from source - absolutely minimal build for embedded
-  cargo build --release --target=$RUST_TARGET --no-default-features
-  
-  mkdir -p /build
-  # Copy youki binary as runc for drop-in compatibility
-  cp target/$RUST_TARGET/release/youki /build/runc
-  chmod +x /build/runc
-  
-  # Simple verification - just check the file exists and is executable
-  file /build/runc
-  ls -la /build/runc
+  xx-go --wrap
+  if [ "$DOCKER_STATIC" = "1" ]; then
+    export CGO_LDFLAGS="-static"
+    export LDFLAGS="-extldflags \"-static\""
+    export BUILDTAGS="netgo osusergo static_build"
+  fi
+  make BUILDTAGS="$BUILDTAGS" COMMIT=$(git rev-parse HEAD) PREFIX=/build install
+  xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") /build/sbin/runc
 EOT
 
-FROM youki-build AS runc-linux
+FROM runc-build AS runc-linux
 FROM binary-dummy AS runc-windows  
 FROM runc-${TARGETOS} AS runc
 
