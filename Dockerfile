@@ -18,7 +18,6 @@ ARG PRODUCT="Iotistic Engine"
 ARG DEFAULT_PRODUCT_LICENSE="Embedded Engine"
 ARG PACKAGER_NAME="Iotistica Technologies"
 
-
 # XX_VERSION specifies the version of the xx utility to use.
 ARG XX_VERSION=1.7.0
 
@@ -43,7 +42,6 @@ COPY --from=build-dummy /build /build
 # base
 FROM --platform=$BUILDPLATFORM ${GOLANG_IMAGE} AS base
 COPY --from=xx / /
-# Disable collecting local telemetry
 RUN go telemetry off && [ "$(go telemetry)" = "off" ] || { echo "Failed to disable Go telemetry"; exit 1; }
 RUN echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 RUN apt-get update && apt-get install --no-install-recommends -y file
@@ -73,9 +71,9 @@ RUN --mount=from=containerd-src,src=/usr/src/containerd,rw \
   xx-go --wrap
   make $([ "$DOCKER_STATIC" = "1" ] && echo "STATIC=1") binaries
   xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") bin/containerd
-  xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") bin/containerd-shim-runc-v2
+  xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") bin/containerd-shim-youki-v2
   mkdir /build
-  mv bin/containerd bin/containerd-shim-runc-v2 /build
+  mv bin/containerd bin/containerd-shim-youki-v2 /build
 EOT
 
 FROM containerd-build AS containerd-linux
@@ -96,48 +94,36 @@ RUN --mount=source=hack/dockerfile/cli.sh,target=/download-or-build-cli.sh \
      && /build/docker --version \
      && /build/docker completion bash >/completion.bash
 
-# runc
-FROM base AS runc-src
-WORKDIR /usr/src/runc
-RUN git init . && git remote add origin "https://github.com/opencontainers/runc.git"
-ARG RUNC_VERSION=v1.1.12
-RUN git fetch -q --depth 1 origin "${RUNC_VERSION}" +refs/tags/*:refs/tags/* && git checkout -q FETCH_HEAD
+# youki
+FROM base AS youki-src
+WORKDIR /usr/src/youki
+RUN git init . && git remote add origin "https://github.com/containers/youki.git"
+ARG YOUKI_VERSION=v0.4.0
+RUN git fetch -q --depth 1 origin "${YOUKI_VERSION}" +refs/tags/*:refs/tags/* && git checkout -q FETCH_HEAD
 
-FROM base AS runc-build
-WORKDIR /go/src/github.com/opencontainers/runc
+FROM base AS youki-build
+WORKDIR /usr/src/youki
 ARG TARGETPLATFORM
-RUN --mount=type=cache,sharing=locked,id=moby-runc-aptlib,target=/var/lib/apt \
-    --mount=type=cache,sharing=locked,id=moby-runc-aptcache,target=/var/cache/apt \
-        xx-apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,sharing=locked,id=youki-aptlib,target=/var/lib/apt \
+    --mount=type=cache,sharing=locked,id=youki-aptcache,target=/var/cache/apt \
+        apt-get update && apt-get install -y --no-install-recommends \
             gcc \
-            libc6-dev \
-            libseccomp-dev \
-            pkg-config
-ARG DOCKER_STATIC
-RUN --mount=from=runc-src,src=/usr/src/runc,rw \
-    --mount=type=cache,target=/root/.cache/go-build,id=runc-build-$TARGETPLATFORM \
-    --mount=type=cache,target=/go/pkg/mod,id=runc-mod-$TARGETPLATFORM <<EOT
+            pkg-config \
+            rustc \
+            cargo \
+            libseccomp-dev
+RUN --mount=from=youki-src,src=/usr/src/youki,rw \
+    --mount=type=cache,target=/usr/local/cargo/registry,id=youki-cargo-$TARGETPLATFORM \
+    --mount=type=cache,target=/usr/local/cargo/git,id=youki-git-$TARGETPLATFORM <<EOT
   set -ex
-  export CC=$(xx-info)-gcc
-  export CGO_ENABLED=1
-  case "$(xx-info arch)" in
-    amd64) export GOARCH=amd64 ;;
-    arm64) export GOARCH=arm64 ;;
-    armv7) export GOARCH=arm GOARM=7 ;;
-  esac
-  xx-go --wrap
-  if [ "$DOCKER_STATIC" = "1" ]; then
-    export CGO_LDFLAGS="-static"
-    export LDFLAGS="-extldflags \"-static\""
-    export BUILDTAGS="netgo osusergo static_build"
-  fi
-  make BUILDTAGS="$BUILDTAGS" COMMIT=$(git rev-parse HEAD) PREFIX=/build install
-  xx-verify $([ "$DOCKER_STATIC" = "1" ] && echo "--static") /build/sbin/runc
+  cargo build --release --locked
+  mkdir /build
+  mv target/release/youki /build/
 EOT
 
-FROM runc-build AS runc-linux
-FROM binary-dummy AS runc-windows  
-FROM runc-${TARGETOS} AS runc
+FROM youki-build AS youki-linux
+FROM binary-dummy AS youki-windows
+FROM youki-${TARGETOS} AS youki
 
 # tini
 FROM base AS tini-src
@@ -172,7 +158,7 @@ FROM tini-build AS tini-linux
 FROM binary-dummy AS tini-windows
 FROM tini-${TARGETOS} AS tini
 
-# compose (keep this for embedded use)
+# compose
 FROM docker/compose-bin:${COMPOSE_VERSION} AS compose
 
 # embedded development stage - minimal but functional
@@ -182,10 +168,8 @@ RUN useradd --create-home --gid docker unprivilegeduser \
  && mkdir -p /home/unprivilegeduser/.local/share/docker \
  && chown -R unprivilegeduser /home/unprivilegeduser
 
-# Set dev environment as safe git directory
 RUN git config --global --add safe.directory $GOPATH/src/github.com/docker/docker
 
-# Install only essential packages for embedded environment
 RUN --mount=type=cache,sharing=locked,id=moby-dev-aptlib,target=/var/lib/apt \
     --mount=type=cache,sharing=locked,id=moby-dev-aptcache,target=/var/cache/apt \
         apt-get update && apt-get install -y --no-install-recommends \
@@ -200,7 +184,6 @@ RUN --mount=type=cache,sharing=locked,id=moby-dev-aptlib,target=/var/lib/apt \
             xfsprogs \
             xz-utils
 
-# Install essential build dependencies
 RUN --mount=type=cache,sharing=locked,id=moby-dev-aptlib,target=/var/lib/apt \
     --mount=type=cache,sharing=locked,id=moby-dev-aptcache,target=/var/cache/apt \
         apt-get update && apt-get install --no-install-recommends -y \
@@ -208,15 +191,13 @@ RUN --mount=type=cache,sharing=locked,id=moby-dev-aptlib,target=/var/lib/apt \
             pkg-config \
             libseccomp-dev
 
-# Copy essential binaries only
 COPY --link --from=tini          /build/ /usr/local/bin/
-COPY --link --from=runc          /build/ /usr/local/bin/
+COPY --link --from=youki         /build/ /usr/local/bin/
 COPY --link --from=containerd    /build/ /usr/local/bin/
 COPY --link --from=dockercli     /build/ /usr/local/cli
 COPY --link --from=dockercli     /completion.bash /etc/bash_completion.d/docker
 COPY --link --from=compose       /docker-compose /usr/libexec/docker/cli-plugins/docker-compose
 
-# Set up Docker configuration
 COPY --link hack/dockerfile/etc/docker/  /etc/docker/
 
 ENV PATH=/usr/local/cli:$PATH
@@ -226,9 +207,9 @@ WORKDIR /go/src/github.com/docker/docker
 VOLUME /var/lib/docker
 VOLUME /home/unprivilegeduser/.local/share/docker
 
-# Use docker-in-docker script for nested containers
 ENTRYPOINT ["hack/dind"]
 
+# docker build stage (unchanged)
 FROM base AS build
 WORKDIR /go/src/github.com/docker/docker
 ENV CGO_ENABLED=1
@@ -258,7 +239,6 @@ ARG DEFAULT_PRODUCT_LICENSE
 ARG PACKAGER_NAME
 ENV PREFIX=/tmp
 RUN <<EOT
-  # Configure linker for arm64
   if [ "$(xx-info arch)" = "arm64" ]; then
     XX_CC_PREFER_LINKER=ld xx-clang --setup-target-triple
   fi
@@ -279,17 +259,15 @@ EOT
 FROM scratch AS binary
 COPY --from=build /build/ /
 
-# embedded complete package - essential components only
+# embedded complete package
 FROM scratch AS embedded
 COPY --link --from=tini          /build/ /
-COPY --link --from=runc          /build/ /
+COPY --link --from=youki         /build/ /
 COPY --link --from=containerd    /build/ /
 COPY --link --from=build         /build/ /
 COPY --link --from=compose       /docker-compose /docker-compose
 
 # smoke tests
-# usage:
-# > docker buildx bake binary-smoketest
 FROM base AS smoketest
 WORKDIR /usr/local/bin
 COPY --from=build /build .
@@ -301,6 +279,5 @@ RUN <<EOT
   docker-proxy --version
 EOT
 
-# embedded development container - optimized for size but functional
 FROM dev-embedded AS dev-embedded-final
 COPY --link . .
