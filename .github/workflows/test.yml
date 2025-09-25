@@ -136,7 +136,7 @@ jobs:
         name: Build embedded image
         uses: docker/bake-action@v6
         with:
-          targets: embedded
+          targets: all
 
       -
         name: Validate
